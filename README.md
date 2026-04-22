@@ -51,6 +51,8 @@ Le workflow réalise automatiquement :
 ### Notification
 
 - Envoi automatique d’un email en cas de baisse détectée
+  
+  ![Alertes](images/AlertesEmail.png)
 
 ---
 
@@ -75,19 +77,19 @@ Le workflow réalise automatiquement :
 
 ### 📈 Chiffre d’affaires par produit
 
-![CA Produit](images/CA par produit.png)
+![CA Produit](images/CAparproduit.png)
 
 ###  Chiffre d’affaires par pays
 
-![CA Pays](images/CA par PAYS.png)
+![CA Pays](images/CAparPAYS.png)
 
 ### CA mensuel
 
-![CA Mensuel](images/Dasborad CA mensuel.png)
+![CA Mensuel](images/CAmensuel.png)
 
 ### Top produit
 
-![Top produit](images/Top produit.png)
+![Top produit](images/Topproduit.png)
 
 ---
 
