@@ -1,0 +1,275 @@
+{
+  "name": "Analyse ventes chocolat  S",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3d5fc538-5c7d-4bf2-a1ce-92e929b8d043",
+              "leftValue": "=$json.alerteBaisse",
+              "rightValue": "$json.alerteBaisse",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        832,
+        -272
+      ],
+      "id": "2256ee53-f2c9-46db-ac9d-a2d1bf9dfc52",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fromEmail": "adodosilvera5@gmail.com",
+        "toEmail": "adodosilvera5@gmail.com",
+        "subject": "⚠️ Alerte baisse détectée",
+        "emailFormat": "text",
+        "text": "=⚠️ ALERTE PERFORMANCE\n\nUne baisse significative (>20%) a été détectée.\n\nMois concernés :\n{{$json.baisseDetectee.map(b =>\n\"- \" + b.mois + \" : \" + b.pourcentage + \"%\"\n).join(\"\\n\")}}\n\nTop produit actuel :\n{{$json.topProduit}}\n\nChiffre d'affaires moyen mensuel :\n{{$json.moyenneMensuelle.toFixed(2)}} $\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1104,
+        -288
+      ],
+      "id": "92e329d4-d01c-4456-b003-5f489b1e7e36",
+      "name": "Send an Email",
+      "webhookId": "84491309-3684-4e90-a19f-ba511ffd7a0f",
+      "credentials": {
+        "smtp": {
+          "id": "8f49QJ1bKu0xjqT8",
+          "name": "SMTP account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        -32
+      ],
+      "id": "fe00f581-59f9-47e1-ae57-fa0be0170609",
+      "name": " Lancement manuel du traitement"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/chocolate_sales.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -16,
+        -32
+      ],
+      "id": "0283ded2-89f0-4c55-972d-a3cc3d530479",
+      "name": "Import des données de ventes"
+    },
+    {
+      "parameters": {
+        "options": {
+          "delimiter": ",",
+          "encoding": "utf-8",
+          "headerRow": true
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        -32
+      ],
+      "id": "f8c8521f-3b55-459a-abde-fe9626d62d0f",
+      "name": "Extraction et structuration du CSV"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.Amount_clean = parseFloat(\n    item.json['Amount'].replace('$', '').replace(/,/g, '')\n  );\n  return item;\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        -32
+      ],
+      "id": "495c3bc4-da11-4535-b5d0-77b11e973832",
+      "name": " Nettoyage et préparation des données"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===============================\n// ANALYSE MÉTIER CENTRALISÉE\n// ===============================\n\nconst caProduit = {};\nconst caPays = {};\nconst caVendeur = {};\nconst caMensuel = {};\nconst anomalies = [];\n\n// -------------------------------\n// 1️⃣ Boucle principale\n// -------------------------------\n\nitems.forEach(item => {\n\n  const product = item.json.Product;\n  const country = item.json.Country;\n  const seller = item.json[\"Sales Person\"];\n  const amount = item.json.Amount_clean;\n  const date = new Date(item.json.Date);\n\n  if (isNaN(date)) return;\n\n  // Mois formaté correctement (YYYY-MM)\n  const monthKey =\n    date.getFullYear() + \"-\" + String(date.getMonth() + 1).padStart(2, \"0\");\n\n  // -------- Détection anomalie --------\n  if (amount < 0) {\n    anomalies.push({\n      type: \"Vente négative\",\n      produit: product,\n      montant: amount\n    });\n  }\n\n  // -------- CA par produit --------\n  if (product) {\n    caProduit[product] = (caProduit[product] || 0) + amount;\n  }\n\n  // -------- CA par pays --------\n  if (country) {\n    caPays[country] = (caPays[country] || 0) + amount;\n  }\n\n  // -------- CA par vendeur --------\n  if (seller) {\n    caVendeur[seller] = (caVendeur[seller] || 0) + amount;\n  }\n\n  // -------- CA mensuel --------\n  caMensuel[monthKey] = (caMensuel[monthKey] || 0) + amount;\n\n});\n\n// -------------------------------\n// 2️⃣ Produit Top Vente\n// -------------------------------\n\nlet topProduit = null;\nlet maxCA = 0;\n\nfor (const p in caProduit) {\n  if (caProduit[p] > maxCA) {\n    maxCA = caProduit[p];\n    topProduit = p;\n  }\n}\n\n// -------------------------------\n// 3️⃣ Détection baisse >20%\n// -------------------------------\n\n// 🔥 Tri chronologique réel\nconst mois = Object.keys(caMensuel).sort(\n  (a, b) => new Date(a) - new Date(b)\n);\n\nconst baisse = [];\n\nfor (let i = 1; i < mois.length; i++) {\n\n  const prev = caMensuel[mois[i - 1]];\n  const current = caMensuel[mois[i]];\n\n  if (prev > 0) {\n    const variation = (current - prev) / prev;\n\n    if (variation < -0.2) {\n      baisse.push({\n        mois: mois[i],\n        variation: variation,\n        pourcentage: Math.round(variation * 100)\n      });\n    }\n  }\n}\n\n// -------------------------------\n// 4️⃣ Moyenne mensuelle\n// -------------------------------\n\nconst totalCA = Object.values(caMensuel).reduce((a, b) => a + b, 0);\n\nconst moyenneMensuelle =\n  Object.keys(caMensuel).length > 0\n    ? totalCA / Object.keys(caMensuel).length\n    : 0;\n\n\n// -------------------------------\n// 5️⃣ Indicateur global d’alerte\n// -------------------------------\n\nconst alerteBaisse = baisse.length > 0;\n\n\n// ===============================\n// 6️⃣ Retour global unique\n// ===============================\n\nreturn [\n  {\n    json: {\n      caProduit,\n      caPays,\n      caVendeur,\n      caMensuel,\n      moyenneMensuelle,\n      topProduit,\n      baisseDetectee: baisse,\n      anomalies,\n      alerteBaisse   // 👈 prêt pour IF node\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        -32
+      ],
+      "id": "24152eb1-0a18-4554-b753-d8d112ec471a",
+      "name": " Agrégation et calcul des indicateurs métier"
+    },
+    {
+      "parameters": {
+        "url": "={{$json.url}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "graph"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1184,
+        224
+      ],
+      "id": "4b208922-c6ec-40c5-939e-7ea0eb6fa166",
+      "name": " Génération automatique des graphiques"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Sécurité : vérifier qu'on a bien des données\n\n\nif (!items.length || !items[0].json) {\n  return [];\n}\n\nconst analysis = items[0].json;\n\n// Sécurisation des objets\nconst caProduit = analysis.caProduit || {};\nconst caPays = analysis.caPays || {};\nconst caMensuel = analysis.caMensuel || {};\nconst topProduit = analysis.topProduit || null;\n\n\n// Fonction générique pour créer un graphique\n\n\nfunction buildChart(type, labels, values, labelTitle) {\n  return {\n    type: type,\n    data: {\n      labels: labels,\n      datasets: [\n        {\n          label: labelTitle,\n          data: values\n        }\n      ]\n    }\n  };\n}\n\n\n// 1️⃣ Graphique CA par produit\n\n\nconst chartProduit = buildChart(\n  \"bar\",\n  Object.keys(caProduit),\n  Object.values(caProduit),\n  \"Chiffre d'affaires par produit\"\n);\n\n\n// 2️⃣ Graphique CA par pays\n\n\nconst chartPays = buildChart(\n  \"pie\",\n  Object.keys(caPays),\n  Object.values(caPays),\n  \"Chiffre d'affaires par pays\"\n);\n\n\n// 3️⃣ Graphique CA mensuel\n\n\nconst chartMensuel = buildChart(\n  \"line\",\n  Object.keys(caMensuel),\n  Object.values(caMensuel),\n  \"Chiffre d'affaires mensuel\"\n);\n\n\n// 4️⃣ Graphique Top Produit\n\n\nlet chartTopProduit = null;\n\nif (topProduit && caProduit[topProduit]) {\n  chartTopProduit = {\n    type: \"bar\",\n    data: {\n      labels: [topProduit],\n      datasets: [\n        {\n          label: \"Top produit\",\n          data: [caProduit[topProduit]]\n        }\n      ]\n    }\n  };\n}\n\n\n// 5️⃣ Fonction génération URL QuickChart\n\n\nfunction buildURL(chartConfig) {\n  const encoded = encodeURIComponent(JSON.stringify(chartConfig));\n  return `https://quickchart.io/chart?width=600&height=400&format=png&c=${encoded}`;\n}\n\n\n// 6️⃣ Retour des graphiques\n\n\nconst results = [\n  { json: { type: \"Produit\", url: buildURL(chartProduit) } },\n  { json: { type: \"Pays\", url: buildURL(chartPays) } },\n  { json: { type: \"Mensuel\", url: buildURL(chartMensuel) } }\n];\n\nif (chartTopProduit) {\n  results.push({\n    json: { type: \"TopProduit\", url: buildURL(chartTopProduit) }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        224
+      ],
+      "id": "c1859cfa-fe8e-474c-bd17-6cfcfcb74718",
+      "name": "Mise en place du graphique"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        []
+      ]
+    },
+    " Lancement manuel du traitement": {
+      "main": [
+        [
+          {
+            "node": "Import des données de ventes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import des données de ventes": {
+      "main": [
+        [
+          {
+            "node": "Extraction et structuration du CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraction et structuration du CSV": {
+      "main": [
+        [
+          {
+            "node": " Nettoyage et préparation des données",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    " Nettoyage et préparation des données": {
+      "main": [
+        [
+          {
+            "node": " Agrégation et calcul des indicateurs métier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    " Agrégation et calcul des indicateurs métier": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mise en place du graphique",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    " Génération automatique des graphiques": {
+      "main": [
+        []
+      ]
+    },
+    "Mise en place du graphique": {
+      "main": [
+        [
+          {
+            "node": " Génération automatique des graphiques",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b6202dc1-c3bf-4429-a6c8-a9d617de9de7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a10e08b8c0a7206237880ac717296a55764293d3029519ccd8bed83b4f83ff16"
+  },
+  "id": "B7MQK248j4b4r95E",
+  "tags": []
+}
